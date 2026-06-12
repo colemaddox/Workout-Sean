@@ -400,6 +400,10 @@
       out.resistance=ns(s.resistance);
       out.rounds=ns(s.rounds);
       out.machine=(PROGRAM.cardioday.options.A.machines.indexOf(s.machine)!==-1)?s.machine:"";
+      // enforce the option↔field invariants the wizard maintains, so imported
+      // data can't render contradictions (e.g. a bike resistance on a B circuit)
+      if(out.option!=="A"){ out.machine=""; out.resistance=""; }
+      if(out.option!=="C") out.rounds="";
     }
     return out;
   }
@@ -707,6 +711,8 @@
       // reach renderSession's positional indexing
       s=alignToProgram(s);
       var st=(typeof d.step==="number"&&isFinite(d.step)&&d.step>=0)?Math.floor(d.step):0;
+      // an option-less cardio draft must land on the chooser, never the blocks step
+      if(s.dayType==="cardioday"&&!s.option) st=0;
       return {sess:s, step:st};
     }catch(e){ return null; }
   }
@@ -1084,7 +1090,6 @@
   }
 
   function bindSession(){
-    var N=PROGRAM[sess.dayType].exercises.length;
     // cancel / discard (two-tap armed, as before)
     var x=$("cancel");
     if(x) x.addEventListener("click",function(){
@@ -1139,10 +1144,24 @@
       el.addEventListener("click",function(){
         var o=el.dataset.opt;
         if(sess.option!==o){
+          // stash the outgoing option's entries and restore them if she comes
+          // back — an exploratory tap (especially mid-edit) must never lose data.
+          // _optCache is wizard-only: normalizeSession strips it from saves/drafts.
+          sess._optCache=sess._optCache||{};
+          if(sess.option){
+            sess._optCache[sess.option]={blocks:sess.blocks, minutes:sess.minutes,
+              resistance:sess.resistance, rounds:sess.rounds, machine:sess.machine};
+          }
+          var c=sess._optCache[o];
           sess.option=o;
-          sess.blocks=PROGRAM.cardioday.options[o].blocks.map(function(){return false;});
-          sess.resistance=""; sess.rounds="";
-          sess.machine = o==="A" ? PROGRAM.cardioday.options.A.machines[0] : "";
+          if(c){
+            sess.blocks=c.blocks; sess.minutes=c.minutes;
+            sess.resistance=c.resistance; sess.rounds=c.rounds; sess.machine=c.machine;
+          } else {
+            sess.blocks=PROGRAM.cardioday.options[o].blocks.map(function(){return false;});
+            sess.minutes=""; sess.resistance=""; sess.rounds="";
+            sess.machine = o==="A" ? PROGRAM.cardioday.options.A.machines[0] : "";
+          }
         }
         Array.prototype.forEach.call(document.querySelectorAll("[data-opt]"),function(x){
           x.classList.remove("on"); x.setAttribute("aria-pressed","false");
